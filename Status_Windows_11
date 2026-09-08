@@ -1,0 +1,158 @@
+# Carrega as bibliotecas visuais nativas do Windows de forma explícita
+Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+
+# === 1. COLETA E PROCESSAMENTO DE DADOS ===
+
+# Uptime
+$LastBoot = (Get-CimInstance -ClassName Win32_OperatingSystem).LastBootUpTime
+$Uptime = (Get-Date) - $LastBoot
+$UptimeStr = "{0} dias, {1} horas e {2} minutos" -f $Uptime.Days, $Uptime.Hours, $Uptime.Minutes
+
+# CPU
+$CpuObj = Get-CimInstance -ClassName Win32_Processor
+$CpuModel = $CpuObj.Name.Trim()
+$CpuCores = "$($CpuObj.NumberOfCores) Físicos / $($CpuObj.NumberOfLogicalProcessors) Lógicos"
+
+# RAM
+$RamOS = Get-CimInstance -ClassName Win32_OperatingSystem
+$TotalRam = [Math]::Round($RamOS.TotalVisibleMemorySize / 1MB, 1)
+$FreeRam = [Math]::Round($RamOS.FreePhysicalMemory / 1MB, 1)
+$UsedRam = [Math]::Round($TotalRam - $FreeRam, 1)
+$RamPct = [Math]::Round(($UsedRam / $TotalRam) * 100, 1)
+
+# Disco C:
+$DiskC = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'"
+$TotalDisk = [Math]::Round($DiskC.Size / 1GB, 1)
+$FreeDisk = [Math]::Round($DiskC.FreeSpace / 1GB, 1)
+$UsedDisk = [Math]::Round($TotalDisk - $FreeDisk, 1)
+$DiskPct = [Math]::Round(($UsedDisk / $TotalDisk) * 100, 1)
+
+# Tabelas Técnicas Avançadas
+$RamDetailsText = Get-CimInstance -ClassName Win32_OperatingSystem | Format-List *Memory* | Out-String
+$DiskPartitionsText = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DriveType=3" | Select-Object DeviceID, VolumeName, @{N="Size(GB)";E={[Math]::Round($_.Size/1GB,1)}}, @{N="Free(GB)";E={[Math]::Round($_.FreeSpace/1GB,1)}} | Format-Table | Out-String
+
+# === 2. CONSTRUÇÃO DA INTERFACE VISUAL (WINDOWS FORMS) ===
+
+# Criação da Janela Principal
+$Form = New-Object System.Windows.Forms.Form
+$Form.Text = "Painel de Controle - Monitoramento do Sistema"
+$Form.Size = New-Object System.Drawing.Size(650, 520)
+$Form.StartPosition = "CenterScreen"
+$Form.BackColor = [System.Drawing.Color]::FromArgb(245, 246, 250)
+$Form.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+
+# Criação das Abas (TabControl)
+$TabControl = New-Object System.Windows.Forms.TabControl
+$TabControl.Size = New-Object System.Drawing.Size(610, 440)
+$TabControl.Location = New-Object System.Drawing.Point(12, 12)
+
+# ---- ABA 1: RESUMO GERAL ----
+$Tab1 = New-Object System.Windows.Forms.TabPage
+$Tab1.Text = "Resumo Geral"
+$Tab1.BackColor = [System.Drawing.Color]::White
+
+# Título Principal
+$LblTitle = New-Object System.Windows.Forms.Label
+$LblTitle.Text = "Métricas em Tempo Real"
+$LblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 16, [System.Drawing.FontStyle]::Bold)
+$LblTitle.ForeColor = [System.Drawing.Color]::FromArgb(44, 62, 80)
+$LblTitle.Location = New-Object System.Drawing.Point(20, 15)
+$LblTitle.Size = New-Object System.Drawing.Size(300, 30)
+$Tab1.Controls.Add($LblTitle)
+
+# Informação de Uptime
+$LblUptime = New-Object System.Windows.Forms.Label
+$LblUptime.Text = "🕒 Uptime: $UptimeStr"
+$LblUptime.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Regular)
+$LblUptime.Location = New-Object System.Drawing.Point(20, 60)
+$LblUptime.Size = New-Object System.Drawing.Size(550, 25)
+$Tab1.Controls.Add($LblUptime)
+
+# Informação de CPU
+$LblCpu = New-Object System.Windows.Forms.Label
+$LblCpu.Text = "⚙️ Processador: $CpuCores"
+$LblCpu.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Regular)
+$LblCpu.Location = New-Object System.Drawing.Point(20, 95)
+$LblCpu.Size = New-Object System.Drawing.Size(550, 25)
+$Tab1.Controls.Add($LblCpu)
+
+# Barra de Progresso RAM
+$LblRamTitle = New-Object System.Windows.Forms.Label
+$LblRamTitle.Text = "🧠 Uso de Memória RAM ($RamPct%)"
+$LblRamTitle.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+$LblRamTitle.Location = New-Object System.Drawing.Point(20, 140)
+$LblRamTitle.Size = New-Object System.Drawing.Size(400, 20)
+$Tab1.Controls.Add($LblRamTitle)
+
+$PbRam = New-Object System.Windows.Forms.ProgressBar
+$PbRam.Location = New-Object System.Drawing.Point(20, 165)
+$PbRam.Size = New-Object System.Drawing.Size(550, 23)
+$PbRam.Value = [int]$RamPct
+$Tab1.Controls.Add($PbRam)
+
+$LblRamSub = New-Object System.Windows.Forms.Label
+$LblRamSub.Text = "Usado: $UsedRam GB / Total: $TotalRam GB"
+$LblRamSub.ForeColor = [System.Drawing.Color]::Gray
+$LblRamSub.Location = New-Object System.Drawing.Point(20, 195)
+$LblRamSub.Size = New-Object System.Drawing.Size(400, 20)
+$Tab1.Controls.Add($LblRamSub)
+
+# Barra de Progresso DISCO
+$LblDiskTitle = New-Object System.Windows.Forms.Label
+$LblDiskTitle.Text = "💾 Armazenamento - Unidade C: ($DiskPct%)"
+$DiskStatusColor = [System.Drawing.Color]::FromArgb(52, 73, 94)
+$LblDiskTitle.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+$LblDiskTitle.Location = New-Object System.Drawing.Point(20, 235)
+$LblDiskTitle.Size = New-Object System.Drawing.Size(400, 20)
+$Tab1.Controls.Add($LblDiskTitle)
+
+$PbDisk = New-Object System.Windows.Forms.ProgressBar
+$PbDisk.Location = New-Object System.Drawing.Point(20, 260)
+$PbDisk.Size = New-Object System.Drawing.Size(550, 23)
+$PbDisk.Value = [int]$DiskPct
+$Tab1.Controls.Add($PbDisk)
+
+$LblDiskSub = New-Object System.Windows.Forms.Label
+$LblDiskSub.Text = "Usado: $UsedDisk GB / Total: $TotalDisk GB"
+$LblDiskSub.ForeColor = [System.Drawing.Color]::Gray
+$LblDiskSub.Location = New-Object System.Drawing.Point(20, 290)
+$LblDiskSub.Size = New-Object System.Drawing.Size(400, 20)
+$Tab1.Controls.Add($LblDiskSub)
+
+# ---- ABA 2: DETALHES DO PROCESSADOR ----
+$Tab2 = New-Object System.Windows.Forms.TabPage
+$Tab2.Text = "Processador"
+$Tab2.BackColor = [System.Drawing.Color]::White
+
+$TxtCpu = New-Object System.Windows.Forms.TextBox
+$TxtCpu.Multiline = $true
+$TxtCpu.ReadOnly = $true
+$TxtCpu.Font = New-Object System.Drawing.Font("Consolas", 10)
+$TxtCpu.Size = New-Object System.Drawing.Size(570, 380)
+$TxtCpu.Location = New-Object System.Drawing.Point(15, 15)
+$TxtCpu.Text = "Modelo da CPU: $CpuModel`r`n`r`nVelocidade Máxima: $($CpuObj.MaxClockSpeed) MHz`r`nVelocidade Atual: $($CpuObj.CurrentClockSpeed) MHz`r`nNúcleos Físicos: $($CpuObj.NumberOfCores)"
+$Tab2.Controls.Add($TxtCpu)
+
+# ---- ABA 3: DETALHES AVANÇADOS ----
+$Tab3 = New-Object System.Windows.Forms.TabPage
+$Tab3.Text = "Memória e Partições"
+$Tab3.BackColor = [System.Drawing.Color]::White
+
+$TxtAdvanced = New-Object System.Windows.Forms.TextBox
+$TxtAdvanced.Multiline = $true
+$TxtAdvanced.ReadOnly = $true
+$TxtAdvanced.ScrollBars = "Vertical"
+$TxtAdvanced.Font = New-Object System.Drawing.Font("Consolas", 9)
+$TxtAdvanced.Size = New-Object System.Drawing.Size(570, 380)
+$TxtAdvanced.Location = New-Object System.Drawing.Point(15, 15)
+$TxtAdvanced.Text = "=== PARTIÇÕES ATIVAS ===`r`n$DiskPartitionsText`r`n`r`n=== ESTRUTURA DE PAGINAÇÃO DA MEMÓRIA ===`r`n$RamDetailsText"
+$Tab3.Controls.Add($TxtAdvanced)
+
+# Vincula as abas na interface principal
+$TabControl.Controls.Add($Tab1)
+$TabControl.Controls.Add($Tab2)
+$TabControl.Controls.Add($Tab3)
+$Form.Controls.Add($TabControl)
+
+# Exibe a janela final renderizada de forma limpa e nativa
+[void]$Form.ShowDialog()
