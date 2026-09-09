@@ -118,38 +118,49 @@ $LblDiskSub.Location = New-Object System.Drawing.Point(20, 290)
 $LblDiskSub.Size = New-Object System.Drawing.Size(400, 20)
 $Tab1.Controls.Add($LblDiskSub)
 
-# --- BOTÃO DE LIMPEZA ADICIONADO ---
+# --- BOTÃO DE LIMPEZA ATUALIZADO (INCLUI CHROME E EDGE) ---
 $BtnClean = New-Object System.Windows.Forms.Button
-$BtnClean.Text = "✨ Executar Limpeza do Sistema"
-$BtnClean.Size = New-Object System.Drawing.Size(220, 35)
+$BtnClean.Text = "✨ Executar Limpeza Completa"
+$BtnClean.Size = New-Object System.Drawing.Size(240, 35)
 $BtnClean.Location = New-Object System.Drawing.Point(20, 330)
 $BtnClean.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
-$BtnClean.BackColor = [System.Drawing.Color]::FromArgb(46, 204, 113) # Verde moderno
+$BtnClean.BackColor = [System.Drawing.Color]::FromArgb(46, 204, 113)
 $BtnClean.ForeColor = [System.Drawing.Color]::White
 $BtnClean.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
 $BtnClean.Cursor = [System.Windows.Forms.Cursors]::Hand
 
-# Lógica executada ao clicar no botão
 $BtnClean.Add_Click({
     $BtnClean.Enabled = $false
     $BtnClean.Text = "⏳ Limpando..."
     $BtnClean.BackColor = [System.Drawing.Color]::Gray
     
-    # Executa a limpeza em segundo plano com tratamento de erros silencioso
-    # 1. Limpa o Temp do Usuário atual
+    # 1. Fecha os navegadores para liberar os arquivos de cache travados
+    Stop-Process -Name "chrome" -Force -ErrorAction SilentlyContinue
+    Stop-Process -Name "msedge" -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 1 # Pequena pausa para garantir o encerramento
+    
+    # 2. Limpeza de Caches do Google Chrome (Preserva os cookies)
+    $ChromeCache = "$env:LOCALAPPDATA\Google\Chrome\User Data\Default\Cache\Cache_Data\*"
+    $ChromeCodeCache = "$env:LOCALAPPDATA\Google\Chrome\User Data\Default\Code Cache\*"
+    Remove-Item -Path $ChromeCache -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item -Path $ChromeCodeCache -Recurse -Force -ErrorAction SilentlyContinue
+    
+    # 3. Limpeza de Caches do Microsoft Edge (Preserva os cookies)
+    $EdgeCache = "$env:LOCALAPPDATA\Microsoft\Edge\User Data\Default\Cache\Cache_Data\*"
+    $EdgeCodeCache = "$env:LOCALAPPDATA\Microsoft\Edge\User Data\Default\Code Cache\*"
+    Remove-Item -Path $EdgeCache -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item -Path $EdgeCodeCache -Recurse -Force -ErrorAction SilentlyContinue
+    
+    # 4. Limpeza Geral (Temp do Usuário, Temp do Sistema e Lixeira)
     Remove-Item -Path "$env:USERPROFILE\AppData\Local\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
-    
-    # 2. Limpa o Temp do Sistema (Geralmente requer privilégios mais altos, mas limpa o que der)
     Remove-Item -Path "C:\Windows\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
-    
-    # 3. Esvazia a Lixeira do Windows sem pedir confirmação
     Clear-RecycleBin -Force -ErrorAction SilentlyContinue
     
     # Exibe confirmação visual de sucesso
-    [System.Windows.Forms.MessageBox]::Show("Limpeza realizada com sucesso!`n`nArquivos temporários básicos e Lixeira foram limpos.", "Sucesso", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
+    [System.Windows.Forms.MessageBox]::Show("Limpeza realizada com sucesso!`n`nItens limpos:`n- Cache do Chrome e Edge (Cookies preservados)`n- Arquivos temporários do sistema`n- Lixeira esvaziada", "Sucesso", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
     
     # Restaura o botão original
-    $BtnClean.Text = "✨ Executar Limpeza do Sistema"
+    $BtnClean.Text = "✨ Executar Limpeza Completa"
     $BtnClean.BackColor = [System.Drawing.Color]::FromArgb(46, 204, 113)
     $BtnClean.Enabled = $true
 })
